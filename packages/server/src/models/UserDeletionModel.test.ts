@@ -1,4 +1,5 @@
 import { beforeAllDb, afterAllTests, beforeEachDb, models, createUser, expectThrow } from '../utils/testing/testUtils';
+import { Day } from '../utils/time';
 
 describe('UserDeletionModel', function() {
 
@@ -55,7 +56,7 @@ describe('UserDeletionModel', function() {
 	test('should provide the next deletion operation', async function() {
 		expect(await models().userDeletion().next()).toBeFalsy();
 
-		jest.useFakeTimers('modern');
+		jest.useFakeTimers();
 
 		const t0 = new Date('2021-12-14').getTime();
 		jest.setSystemTime(t0);
@@ -91,7 +92,7 @@ describe('UserDeletionModel', function() {
 	});
 
 	test('should start and stop deletion jobs', async function() {
-		jest.useFakeTimers('modern');
+		jest.useFakeTimers();
 
 		const t0 = new Date('2021-12-14').getTime();
 		jest.setSystemTime(t0);
@@ -139,6 +140,42 @@ describe('UserDeletionModel', function() {
 			expect(d.success).toBe(1);
 			expect(d.error).toBe('');
 		}
+
+		jest.useRealTimers();
+	});
+
+	test('should auto-add users for deletion', async function() {
+		jest.useFakeTimers();
+
+		const t0 = new Date('2022-02-22').getTime();
+		jest.setSystemTime(t0);
+
+		await createUser(1);
+		const user2 = await createUser(2);
+
+		await models().user().save({
+			id: user2.id,
+			enabled: 0,
+			disabled_time: t0,
+		});
+
+		await models().userDeletion().autoAdd(10, 90 * Day, t0 + 3 * Day);
+
+		expect(await models().userDeletion().count()).toBe(0);
+
+		const t1 = new Date('2022-05-30').getTime();
+		jest.setSystemTime(t1);
+
+		await models().userDeletion().autoAdd(10, 90 * Day, t1 + 3 * Day);
+
+		expect(await models().userDeletion().count()).toBe(1);
+		const d = (await models().userDeletion().all())[0];
+		expect(d.user_id).toBe(user2.id);
+		expect(d.scheduled_time).toBe(t1 + 3 * Day);
+
+		// Shouldn't add it again if running autoAdd() again
+		await models().userDeletion().autoAdd(10, 90 * Day, t1 + 3 * Day);
+		expect(await models().userDeletion().count()).toBe(1);
 
 		jest.useRealTimers();
 	});

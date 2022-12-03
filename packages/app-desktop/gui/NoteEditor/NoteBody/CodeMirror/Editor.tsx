@@ -86,7 +86,7 @@ export interface EditorProps {
 	style: any;
 	codeMirrorTheme: any;
 	readOnly: boolean;
-	autoMatchBraces: boolean;
+	autoMatchBraces: boolean | object;
 	keyMap: string;
 	plugins: PluginStates;
 	onChange: any;
@@ -100,6 +100,7 @@ export interface EditorProps {
 function Editor(props: EditorProps, ref: any) {
 	const [editor, setEditor] = useState(null);
 	const editorParent = useRef(null);
+	const lastEditTime = useRef(NaN);
 
 	// Codemirror plugins add new commands to codemirror (or change it's behavior)
 	// This command adds the smartListIndent function which will be bound to tab
@@ -120,6 +121,7 @@ function Editor(props: EditorProps, ref: any) {
 	const editor_change = useCallback((cm: any, change: any) => {
 		if (props.onChange && change.origin !== 'setValue') {
 			props.onChange(cm.getValue());
+			lastEditTime.current = Date.now();
 		}
 	}, [props.onChange]);
 
@@ -154,7 +156,8 @@ function Editor(props: EditorProps, ref: any) {
 	}, [props.onResize]);
 
 	const editor_update = useCallback((cm: any) => {
-		props.onUpdate(cm);
+		const edited = Date.now() - lastEditTime.current <= 100;
+		props.onUpdate(cm, edited);
 	}, [props.onUpdate]);
 
 	useEffect(() => {
@@ -216,9 +219,11 @@ function Editor(props: EditorProps, ref: any) {
 			cm.off('dragover', editor_drag);
 			cm.off('refresh', editor_resize);
 			cm.off('update', editor_update);
-			editorParent.current.removeChild(cm.getWrapperElement());
+			// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
+			if (editorParent.current) editorParent.current.removeChild(cm.getWrapperElement());
 			setEditor(null);
 		};
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, []);
 
 	useEffect(() => {
@@ -231,36 +236,42 @@ function Editor(props: EditorProps, ref: any) {
 			}
 			editor.setOption('screenReaderLabel', props.value);
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.value]);
 
 	useEffect(() => {
 		if (editor) {
 			editor.setOption('theme', props.codeMirrorTheme);
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.codeMirrorTheme]);
 
 	useEffect(() => {
 		if (editor) {
 			editor.setOption('mode', props.mode);
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.mode]);
 
 	useEffect(() => {
 		if (editor) {
 			editor.setOption('readOnly', props.readOnly);
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.readOnly]);
 
 	useEffect(() => {
 		if (editor) {
 			editor.setOption('autoCloseBrackets', props.autoMatchBraces);
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.autoMatchBraces]);
 
 	useEffect(() => {
 		if (editor) {
 			editor.setOption('keyMap', props.keyMap ? props.keyMap : 'default');
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.keyMap]);
 
 	useEffect(() => {

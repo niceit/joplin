@@ -1,8 +1,8 @@
 import Logger from '@joplin/lib/Logger';
 import { Pagination } from '../models/utils/pagination';
-import { msleep } from '../utils/time';
+import { Day, msleep } from '../utils/time';
 import BaseService from './BaseService';
-import { UserDeletion, UserFlagType, Uuid } from './database/types';
+import { BackupItemType, UserDeletion, UserFlagType, Uuid } from './database/types';
 
 const logger = Logger.create('UserDeletionService');
 
@@ -59,6 +59,21 @@ export default class UserDeletionService extends BaseService {
 	private async deleteUserAccount(userId: Uuid, _options: DeletionJobOptions = null) {
 		logger.info(`Deleting user account: ${userId}`);
 
+		const user = await this.models.user().load(userId);
+		if (!user) throw new Error(`No such user: ${userId}`);
+
+		const flags = await this.models.userFlag().allByUserId(userId);
+
+		await this.models.backupItem().add(
+			BackupItemType.UserAccount,
+			user.email,
+			JSON.stringify({
+				user,
+				flags,
+			}),
+			userId
+		);
+
 		await this.models.userFlag().add(userId, UserFlagType.UserDeletionInProgress);
 
 		await this.models.session().deleteByUserId(userId);
@@ -74,6 +89,20 @@ export default class UserDeletionService extends BaseService {
 		};
 
 		logger.info('Starting user deletion: ', deletion);
+
+		// Normally, a user that is still enabled should not be processed here,
+		// because it should not have been queued to begin with (or if it was
+		// queued, then enabled, it should have been removed from the queue).
+		// But as a fail safe we have this extra check.
+		//
+		// We also remove the job from the queue so that the service doesn't try
+		// to process it again.
+		const user = await this.models.user().load(deletion.user_id);
+		if (user.enabled) {
+			logger.error(`Trying to delete a user that is still enabled - aborting and removing the user from the queue. Deletion job: ${JSON.stringify(deletion)}`);
+			await this.models.userDeletion().removeFromQueueByUserId(user.id);
+			return;
+		}
 
 		let error: any = null;
 		let success: boolean = true;
@@ -91,6 +120,24 @@ export default class UserDeletionService extends BaseService {
 		await this.models.userDeletion().end(deletion.id, success, error);
 
 		logger.info('Completed user deletion: ', deletion.id);
+	}
+
+	public async autoAddForDeletion() {
+		const addedUserIds = await this.models.userDeletion().autoAdd(
+			10,
+			this.config.USER_DATA_AUTO_DELETE_AFTER_DAYS * Day,
+			Date.now() + 3 * Day,
+			{
+				processAccount: true,
+				processData: true,
+			}
+		);
+
+		if (addedUserIds.length) {
+			logger.info(`autoAddForDeletion: Queued ${addedUserIds.length} users for deletions: ${addedUserIds.join(', ')}`);
+		} else {
+			logger.info('autoAddForDeletion: No users were queued for deletion');
+		}
 	}
 
 	public async processNextDeletionJob() {

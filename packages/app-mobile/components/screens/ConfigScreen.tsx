@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/explicit-member-accessibility */
 import Slider from '@react-native-community/slider';
 const React = require('react');
-const { Platform, Linking, View, Switch, StyleSheet, ScrollView, Text, Button, TouchableOpacity, TextInput, Alert, PermissionsAndroid } = require('react-native');
+const { Platform, Linking, View, Switch, StyleSheet, ScrollView, Text, Button, TouchableOpacity, TextInput, Alert, PermissionsAndroid, TouchableNativeFeedback } = require('react-native');
 import Setting, { AppType } from '@joplin/lib/models/Setting';
 import NavService from '@joplin/lib/services/NavService';
 import ReportService from '@joplin/lib/services/ReportService';
@@ -13,14 +14,14 @@ import { reg } from '@joplin/lib/registry';
 import { State } from '@joplin/lib/reducer';
 const VersionInfo = require('react-native-version-info').default;
 const { connect } = require('react-redux');
-const { ScreenHeader } = require('../screen-header.js');
+import ScreenHeader from '../ScreenHeader';
 const { _ } = require('@joplin/lib/locale');
 const { BaseScreenComponent } = require('../base-screen.js');
 const { Dropdown } = require('../Dropdown.js');
 const { themeStyle } = require('../global-style.js');
 const shared = require('@joplin/lib/components/shared/config-shared.js');
 import SyncTargetRegistry from '@joplin/lib/SyncTargetRegistry';
-const RNFS = require('react-native-fs');
+import { openDocumentTree } from '@joplin/react-native-saf-x';
 
 class ConfigScreenComponent extends BaseScreenComponent {
 	static navigationOptions(): any {
@@ -37,11 +38,26 @@ class ConfigScreenComponent extends BaseScreenComponent {
 			creatingReport: false,
 			profileExportStatus: 'idle',
 			profileExportPath: '',
+			fileSystemSyncPath: Setting.value('sync.2.path'),
 		};
 
 		this.scrollViewRef_ = React.createRef();
 
-		shared.init(this);
+		shared.init(this, reg);
+
+		this.selectDirectoryButtonPress = async () => {
+			try {
+				const doc = await openDocumentTree(true);
+				if (doc?.uri) {
+					this.setState({ fileSystemSyncPath: doc.uri });
+					shared.updateSettingValue(this, 'sync.2.path', doc.uri);
+				} else {
+					throw new Error('User cancelled operation');
+				}
+			} catch (e) {
+				reg.logger().info('Didn\'t pick sync dir: ', e);
+			}
+		};
 
 		this.checkSyncConfig_ = async () => {
 			// to ignore TLS erros we need to chage the global state of the app, if the check fails we need to restore the original state
@@ -58,8 +74,15 @@ class ConfigScreenComponent extends BaseScreenComponent {
 		};
 
 		this.saveButton_press = async () => {
-			if (this.state.changedSettingKeys.includes('sync.target') && this.state.settings['sync.target'] === SyncTargetRegistry.nameToId('filesystem') && !(await this.checkFilesystemPermission())) {
-				Alert.alert(_('Warning'), _('In order to use file system synchronisation your permission to write to external storage is required.'));
+			if (this.state.changedSettingKeys.includes('sync.target') && this.state.settings['sync.target'] === SyncTargetRegistry.nameToId('filesystem')) {
+				if (Platform.OS === 'android') {
+					if (Platform.Version < 29) {
+						if (!(await this.checkFilesystemPermission())) {
+							Alert.alert(_('Warning'), _('In order to use file system synchronisation your permission to write to external storage is required.'));
+						}
+					}
+				}
+
 				// Save settings anyway, even if permission has not been granted
 			}
 
@@ -90,11 +113,18 @@ class ConfigScreenComponent extends BaseScreenComponent {
 			const logItemCsv = service.csvCreate(logItemRows);
 
 			const itemListCsv = await service.basicItemList({ format: 'csv' });
-			const filePath = `${RNFS.ExternalDirectoryPath}/syncReport-${new Date().getTime()}.txt`;
+
+			const externalDir = await shim.fsDriver().getExternalDirectoryPath();
+
+			if (!externalDir) {
+				this.setState({ creatingReport: false });
+				return;
+			}
+
+			const filePath = `${externalDir}/syncReport-${new Date().getTime()}.txt`;
 
 			const finalText = [logItemCsv, itemListCsv].join('\n================================================================================\n');
-
-			await RNFS.writeFile(filePath, finalText);
+			await shim.fsDriver().writeFile(filePath, finalText, 'utf8');
 			alert(`Debug report exported to ${filePath}`);
 			this.setState({ creatingReport: false });
 		};
@@ -106,7 +136,12 @@ class ConfigScreenComponent extends BaseScreenComponent {
 		};
 
 		this.exportProfileButtonPress_ = async () => {
-			const p = this.state.profileExportPath ? this.state.profileExportPath : `${RNFS.ExternalStorageDirectoryPath}/JoplinProfileExport`;
+			const externalDir = await shim.fsDriver().getExternalDirectoryPath();
+			if (!externalDir) {
+				return;
+			}
+			const p = this.state.profileExportPath ? this.state.profileExportPath : `${externalDir}/JoplinProfileExport`;
+
 			this.setState({
 				profileExportStatus: 'prompt',
 				profileExportPath: p,
@@ -413,12 +448,7 @@ class ConfigScreenComponent extends BaseScreenComponent {
 		if (md.isEnum) {
 			value = value.toString();
 
-			const items = [];
-			const settingOptions = md.options();
-			for (const k in settingOptions) {
-				if (!settingOptions.hasOwnProperty(k)) continue;
-				items.push({ label: settingOptions[k], value: k.toString() });
-			}
+			const items = Setting.enumOptionsToValueLabels(md.options(), md.optionsOrder ? md.optionsOrder() : []);
 
 			return (
 				<View key={key} style={{ flexDirection: 'column', borderBottomWidth: 1, borderBottomColor: theme.dividerColor }}>
@@ -442,7 +472,7 @@ class ConfigScreenComponent extends BaseScreenComponent {
 								color: theme.color,
 								fontSize: theme.fontSize,
 							}}
-							onValueChange={(itemValue: any) => {
+							onValueChange={(itemValue: string) => {
 								updateSettingValue(key, itemValue);
 							}}
 						/>
@@ -450,7 +480,7 @@ class ConfigScreenComponent extends BaseScreenComponent {
 					{descriptionComp}
 				</View>
 			);
-		} else if (md.type == Setting.TYPE_BOOL) {
+		} else if (md.type === Setting.TYPE_BOOL) {
 			return this.renderToggle(key, md.label(), value, updateSettingValue, descriptionComp);
 			// return (
 			// 	<View key={key}>
@@ -463,7 +493,7 @@ class ConfigScreenComponent extends BaseScreenComponent {
 			// 		{descriptionComp}
 			// 	</View>
 			// );
-		} else if (md.type == Setting.TYPE_INT) {
+		} else if (md.type === Setting.TYPE_INT) {
 			const unitLabel = md.unitLabel ? md.unitLabel(value) : value;
 			// Note: Do NOT add the minimumTrackTintColor and maximumTrackTintColor props
 			// on the Slider as they are buggy and can crash the app on certain devices.
@@ -480,7 +510,21 @@ class ConfigScreenComponent extends BaseScreenComponent {
 					</View>
 				</View>
 			);
-		} else if (md.type == Setting.TYPE_STRING) {
+		} else if (md.type === Setting.TYPE_STRING) {
+			if (md.key === 'sync.2.path' && shim.fsDriver().isUsingAndroidSAF()) {
+				return (
+					<TouchableNativeFeedback key={key} onPress={this.selectDirectoryButtonPress} style={this.styles().settingContainer}>
+						<View style={this.styles().settingContainer}>
+							<Text key="label" style={this.styles().settingText}>
+								{md.label()}
+							</Text>
+							<Text style={this.styles().settingControl}>
+								{this.state.fileSystemSyncPath}
+							</Text>
+						</View>
+					</TouchableNativeFeedback>
+				);
+			}
 			return (
 				<View key={key} style={this.styles().settingContainer}>
 					<Text key="label" style={this.styles().settingText}>
@@ -530,9 +574,9 @@ class ConfigScreenComponent extends BaseScreenComponent {
 			if (this.state.profileExportStatus === 'prompt') {
 				const profileExportPrompt = (
 					<View style={this.styles().settingContainer} key="profileExport">
-						<Text style={this.styles().settingText}>Path:</Text>
-						<TextInput style={{ ...this.styles().textInput, paddingRight: 20 }} onChange={(event: any) => this.setState({ profileExportPath: event.nativeEvent.text })} value={this.state.profileExportPath} placeholder="/path/to/sdcard" keyboardAppearance={theme.keyboardAppearance}></TextInput>
-						<Button title="OK" onPress={this.exportProfileButtonPress2_}></Button>
+						<Text style={{ ...this.styles().settingText, flex: 0 }}>Path:</Text>
+						<TextInput style={{ ...this.styles().textInput, paddingRight: 20, width: '75%', marginRight: 'auto' }} onChange={(event: any) => this.setState({ profileExportPath: event.nativeEvent.text })} value={this.state.profileExportPath} placeholder="/path/to/sdcard" keyboardAppearance={theme.keyboardAppearance} />
+						<Button title="OK" onPress={this.exportProfileButtonPress2_} />
 					</View>
 				);
 

@@ -116,7 +116,7 @@
 			const now = Date.now();
 			if (now >= ignoreNextScrollTime_) ignoreNextScrollEventCount_ = 0;
 			if (ignoreNextScrollEventCount_ < 10) { // for safety
-				ignoreNextScrollTime_ = now + 200;
+				ignoreNextScrollTime_ = now + 1000;
 				ignoreNextScrollEventCount_ += 1;
 			}
 		};
@@ -277,6 +277,9 @@
 		let restoreAndRefreshTimeoutID_ = null;
 		let restoreAndRefreshTimeout_ = Date.now();
 
+		// If 'noteRenderComplete' message is ongoing, resizing should not trigger a 'percentScroll' messsage.
+		let noteRenderCompleteMessageIsOngoing_ = false;
+
 		// A callback anonymous function invoked when the scroll height changes.
 		const onRendering = observeRendering((cause, height, heightChanged) => {
 			if (!alreadyAllImagesLoaded && !scrollmap.isPresent()) {
@@ -285,16 +288,17 @@
 					alreadyAllImagesLoaded = true;
 					scrollmap.refresh();
 					restorePercentScroll();
+					noteRenderCompleteMessageIsOngoing_ = true;
 					ipcProxySendToHost('noteRenderComplete');
 					return;
 				}
 			}
-			if (!heightChanged) return;
+			if (!heightChanged && cause !== 'dom-changed') return;
 			const restoreAndRefresh = () => {
 				scrollmap.refresh();
 				restorePercentScroll();
 				// To ensures Editor's scroll position is synced with Viewer's
-				ipcProxySendToHost('percentScroll', percentScroll_);
+				if (!noteRenderCompleteMessageIsOngoing_) ipcProxySendToHost('percentScroll', percentScroll_);
 			};
 			const now = Date.now();
 			if (now < restoreAndRefreshTimeout_) {
@@ -333,7 +337,11 @@
 			contentElement.innerHTML = html;
 
 			scrollmap.create(event.options.markupLineCount);
-			restorePercentScroll(); // First, a quick treatment is applied.
+			if (typeof event.options.percent !== 'number') {
+				restorePercentScroll(); // First, a quick treatment is applied.
+			} else {
+				setPercentScroll(event.options.percent);
+			}
 
 			addPluginAssets(event.options.pluginAssets);
 
@@ -345,11 +353,13 @@
 
 			if (scrollmap.isPresent()) {
 				// Now, ready to receive scrollToHash/setPercentScroll from Editor.
+				noteRenderCompleteMessageIsOngoing_ = true;
 				ipcProxySendToHost('noteRenderComplete');
 			}
 		}
 
 		ipc.setPercentScroll = (event) => {
+			noteRenderCompleteMessageIsOngoing_ = false;
 			setPercentScroll(event.percent);
 		}
 
@@ -569,6 +579,17 @@
 			}
 		}
 
+		ipc.textSelected = function(event) {
+			ipcProxySendToHost('contextMenu', {
+				type: 'text',
+				textToCopy: event.text,
+			});
+		}
+
+		ipc.openPdfViewer = function(event) {
+			ipcProxySendToHost('openPdfViewer', { resourceId: event.resourceId, mime: 'application/pdf', pageNo: event.pageNo || 1 });
+		}
+
 		window.addEventListener('hashchange', webviewLib.logEnabledEventHandler(e => {
 			if (!window.location.hash) return;
 
@@ -580,9 +601,24 @@
 		}));
 
 		document.addEventListener('contextmenu', webviewLib.logEnabledEventHandler(event => {
-			let element = event.target;
-
 			// To handle right clicks on resource icons
+			let element = event.target;
+			
+			// Mermaid svgs are wrapped inside a <pre> with class "mermaid"
+			let mermaidElement = element.closest(".mermaid")?.children[0];
+			if (mermaidElement) {
+				const svgString = new XMLSerializer().serializeToString(mermaidElement);
+				if (!!svgString) {
+					ipcProxySendToHost('contextMenu', {
+						type: 'image',
+						textToCopy: svgString,
+						mime: 'image/svg+xml',
+						filename: mermaidElement.id + '.svg',
+					});
+				}
+				return;
+			}
+
 			if (element && !element.getAttribute('data-resource-id')) element = element.parentElement;
 
 			if (element && element.getAttribute('data-resource-id')) {
@@ -626,6 +662,17 @@
 		}));
 		document.addEventListener('dragover', webviewLib.logEnabledEventHandler(e => {
 			e.preventDefault();
+		}));
+
+		document.addEventListener('click', webviewLib.logEnabledEventHandler(e => {
+			document.querySelectorAll('.media-pdf').forEach(element => {
+				if(!!element.contentWindow){
+					element.contentWindow.postMessage({
+						type: 'blur'
+					}, '*');
+				}
+			}
+			);
 		}));
 
 		let lastClientWidth_ = NaN, lastClientHeight_ = NaN, lastScrollTop_ = NaN;

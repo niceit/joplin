@@ -1,5 +1,56 @@
 # Joplin Server Changelog
 
+## [server-v2.9.7](https://github.com/laurent22/joplin/releases/tag/server-v2.9.7) - 2022-11-05T16:51:39Z
+
+- Improved: Allow enabling and disabling tasks (1379c9c)
+- Improved: Allow searching user by email or name (1cfbefb)
+- Improved: Fail-safe when trying to delete a non-disabled account (21883b4)
+- Improved: Paginate users (8ac8d53)
+- Improved: Refactor table structure (8ea6d89)
+- Improved: Update sender email (bf92ee7)
+- Improved: Upgrade Koa framework to 2.13.4 (dc92546)
+- Improved: Upgrade to Node 18 (f34078b)
+- Improved: When re-activating an account, remove it from the deletion queue (bbc4228)
+- Fixed: Fixed account activation logic (ccf5d20)
+
+## [server-v2.9.5](https://github.com/laurent22/joplin/releases/tag/server-v2.9.5) - 2022-10-11T10:44:01Z
+
+- New: Add support for sidebar in user pages (053dbab)
+- Improved: Automatically delete expired sessions (d5dfecc)
+- Improved: Cannot sort user deletions by email (8e18024)
+- Improved: Do not make checkboxes in published notes clickable (cb637e8)
+- Improved: Improve admin email UI (e3c9bcb)
+- Improved: Process user deletions once an hour (f99b8df)
+- Improved: Use apt to install tini to enable multi-platform support (#6097 by Erik Thomsen)
+- Fixed: Could not manually start task (#6491)
+- Fixed: Fixed Unsupported File Type error when sharing certain notes (#6531)
+- Fixed: Fixed removal of user deletion tasks (8f8cc12)
+- Fixed: Fixed sidebar menu selection (422a5bf)
+- Fixed: Fixed user deletion schedule (bfe5ee8)
+- Fixed: Published note must be scrollable when it contains a large table (#6370)
+
+## [server-v2.7.4](https://github.com/laurent22/joplin/releases/tag/server-v2.7.4) - 2022-02-02T19:23:34Z
+
+- New: Add task to automate deletion of disabled accounts (1afcb27)
+- Improved: Always display Help link even when not logged in (00163f5)
+- Improved: Call server start command directly, without going through npm (c185f00)
+- Improved: Disable session expiration logic for now (4c11bbf)
+- Improved: Enabled task to automatically delete sessions every 6 hours (69170dd)
+- Improved: Fixed handling of mailer security settings, and changed env variable name MAILER_SECURE =&gt; MAILER_SECURITY, and default port 587 =&gt; 465 (Breaking change) (#5222)
+- Improved: Improved env variable validation and support true-false as boolean values (fd322ed)
+- Improved: Improved string localization in views (98bfb65)
+- Improved: Make page wider only when displaying admin pages (df9c460)
+- Improved: Move admin pages under /admin (#6006)
+- Improved: Put admin pages under /admin (09cbe3c)
+- Improved: Remove uneeded CSS file (9dbf5e0)
+- Improved: Set NODE_ENV to "production" in Docker image (ed0f0fa)
+- Improved: Set a timestamp when disabling a user (2f7ab7e)
+- Improved: Simplify Docker image (#6010)
+- Improved: Temporarily save user info before deleting account (68469bc)
+- Improved: View sent emails from admin dashboard (f5f7981)
+- Fixed: Fixed sharing notebook with a user that does not have E2EE enabled (#5958)
+- Fixed: Use multi-stage builds and smaller base image (#6048) (#5397 by [@aaron](https://github.com/aaron))
+
 ## [server-v2.7.3](https://github.com/laurent22/joplin/releases/tag/server-v2.7.3) - 2021-12-29T13:35:12Z
 
 - Improved: Allow deleting complete user data (#5824)

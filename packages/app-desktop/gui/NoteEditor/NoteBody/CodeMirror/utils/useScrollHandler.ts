@@ -17,7 +17,7 @@ export default function useScrollHandler(editorRef: any, webviewRef: any, onScro
 		const now = Date.now();
 		if (now >= ignoreNextEditorScrollTime_.current) ignoreNextEditorScrollEventCount_.current = 0;
 		if (ignoreNextEditorScrollEventCount_.current < 10) { // for safety
-			ignoreNextEditorScrollTime_.current = now + 200;
+			ignoreNextEditorScrollTime_.current = now + 1000;
 			ignoreNextEditorScrollEventCount_.current += 1;
 		}
 	};
@@ -94,13 +94,15 @@ export default function useScrollHandler(editorRef: any, webviewRef: any, onScro
 		if (editorRef.current) {
 			scheduleOnScroll({ percent });
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [scheduleOnScroll]);
 
 	const setViewerPercentScroll = useCallback((percent: number) => {
 		if (webviewRef.current) {
-			webviewRef.current.wrappedInstance.send('setPercentScroll', percent);
+			webviewRef.current.send('setPercentScroll', percent);
 			scheduleOnScroll({ percent });
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [scheduleOnScroll]);
 
 	const editor_scroll = useCallback(() => {
@@ -126,6 +128,7 @@ export default function useScrollHandler(editorRef: any, webviewRef: any, onScro
 			lastResizeHeight_.current = NaN;
 			lastLinesHeight_.current = NaN;
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [setViewerPercentScroll]);
 
 	const resetScroll = useCallback(() => {
@@ -134,6 +137,7 @@ export default function useScrollHandler(editorRef: any, webviewRef: any, onScro
 			editorRef.current.setScrollPercent(0);
 			scrollTopIsUncertain_.current = false;
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, []);
 
 	const editor_resize = useCallback((cm) => {
@@ -152,13 +156,15 @@ export default function useScrollHandler(editorRef: any, webviewRef: any, onScro
 			lastResizeHeight_.current = NaN;
 			lastLinesHeight_.current = NaN;
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, []);
 
 	// When heights of lines are updated in CodeMirror, 'update' events are raised.
 	// If such an update event is raised, scroll position should be restored.
 	// See https://github.com/laurent22/joplin/issues/5981
-	const editor_update = useCallback((cm) => {
+	const editor_update = useCallback((cm: any, edited: boolean) => {
 		if (isCodeMirrorReady(cm)) {
+			if (edited) return;
 			const linesHeight = cm.heightAtLine(cm.lineCount()) - cm.heightAtLine(0);
 			if (lastLinesHeight_.current !== linesHeight) {
 				// To avoid cancelling intentional scroll position changes,
@@ -172,6 +178,7 @@ export default function useScrollHandler(editorRef: any, webviewRef: any, onScro
 			lastResizeHeight_.current = NaN;
 			lastLinesHeight_.current = NaN;
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, []);
 
 	const getLineScrollPercent = useCallback(() => {
@@ -182,6 +189,7 @@ export default function useScrollHandler(editorRef: any, webviewRef: any, onScro
 		} else {
 			return scrollPercent_.current;
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, []);
 
 	return {
